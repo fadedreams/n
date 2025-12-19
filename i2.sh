@@ -14,8 +14,8 @@ fi
 
 echo "Detected distribution: $NAME ($ID)"
 
-# Enable EPEL repository for RHEL-based systems (Rocky, Alma, CentOS, RHEL, etc.)
-if [[ "$DISTRO_LIKE" =~ rhel || "$DISTRO_LIKE" =~ fedora || "$DISTRO_ID" == "rocky" || "$DISTRO_ID" == "almalinux" || "$DISTRO_ID" == "centos" ]]; then
+# Enable EPEL for RHEL-based systems (Rocky, Alma, CentOS, etc.)
+if [[ "$DISTRO_LIKE" =~ rhel || "$DISTRO_LIKE" =~ fedora || "$DISTRO_ID" == "rocky" ]]; then
     echo "Enabling EPEL repository for extra packages..."
     sudo dnf install -y epel-release
 fi
@@ -64,27 +64,27 @@ else
     FD_VERSION="v10.3.0"
     FD_ARCH="x86_64-unknown-linux-gnu"
     FD_TAR="fd-${FD_VERSION}-${FD_ARCH}.tar.gz"
-    FD_URL="https://github.com/sharkdp/fd/releases/download/${FD_VERSION}/${FD_TAR}"
+    FD_URL="https://github.com/sharkdp/fd/releases/download/${FD_VERSION}/${FD_URL}"
     curl -L -o "$FD_TAR" "$FD_URL"
     tar -xzf "$FD_TAR"
     sudo mv "${FD_TAR%.tar.gz}/fd" /usr/local/bin/
     sudo chmod +x /usr/local/bin/fd
 fi
 
-# --- Install Neovim v0.11.5 compatible with older glibc (Rocky 8, CentOS 8, etc.) ---
-echo "Installing Neovim v0.11.5 (glibc-compatible build for older systems)..."
+# --- Install latest stable Neovim ---
+echo "Installing latest stable Neovim..."
 NVIM_VERSION="v0.11.5"
 NVIM_TAR="nvim-linux-x86_64.tar.gz"
-NVIM_URL="https://github.com/neovim/neovim-releases/releases/download/${NVIM_VERSION}/${NVIM_TAR}"
+NVIM_URL="https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/${NVIM_TAR}"
 
 curl -L -o "$NVIM_TAR" "$NVIM_URL"
 tar -xzf "$NVIM_TAR"
 
 sudo rm -rf /usr/local/nvim
-sudo mv nvim-linux-x86_64 /usr/local/nvim
+sudo mv "nvim-linux-x86_64" /usr/local/nvim
 sudo ln -sf /usr/local/nvim/bin/nvim /usr/local/bin/nvim
 
-echo "Neovim ${NVIM_VERSION} (old glibc compatible) installed successfully."
+echo "Neovim ${NVIM_VERSION} installed successfully."
 
 # Verify installations
 echo "Verifying installed tools..."
@@ -161,29 +161,11 @@ EOF
 
 # Source .bashrc to make aliases available immediately
 echo "Reloading ~/.bashrc to activate aliases in this session..."
-source ~/.bashrc 2>/dev/null || true
+source ~/.bashrc 2>/dev/null || true  # Suppress PS1 errors if any
 
 echo "Aliases added and activated!"
 echo "You can now use 'v' for nvim, 'll', 'gs', and all the other shortcuts right away."
 
-# ========================================
-# Deploy your Neovim config
-# ========================================
-echo "Deploying your Neovim config from GitHub release..."
-cd ~
-curl -L -o n.7z https://github.com/fadedreams/n/releases/download/v1.0/n.7z || { echo "Download failed! Check URL or network."; exit 1; }
+echo "All done! Your server is fully set up with Neovim, tools, and handy aliases."
+echo "New login sessions will automatically load the aliases too."
 
-echo "Extracting config... (you will be prompted for the password)"
-7z x n.7z -o.config/
-
-# Only clean up if extraction succeeded
-if [ $? -eq 0 ]; then
-    rm n.7z
-    echo "Neovim config deployed successfully!"
-else
-    echo "Extraction failed (wrong password or corrupted archive). Keeping n.7z for retry."
-    exit 1
-fi
-
-echo "Starting Neovim to let plugin manager install everything..."
-nvim
