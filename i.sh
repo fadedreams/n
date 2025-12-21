@@ -159,12 +159,6 @@ alias cwd='pwd | tr -d "\n" | xclip -selection clipboard && echo "PWD copied: $(
 alias clast='fc -ln -1 | tr -d "\n" | xclip -selection clipboard && echo "Last command copied."'
 EOF
 
-# Source .bashrc to make aliases available immediately
-echo "Reloading ~/.bashrc to activate aliases in this session..."
-source ~/.bashrc 2>/dev/null || true
-
-echo "Aliases added and activated!"
-echo "You can now use 'v' for nvim, 'll', 'gs', and all the other shortcuts right away."
 
 # ========================================
 # Deploy your Neovim config
@@ -185,4 +179,8 @@ else
     exit 1
 fi
 
+# Source .bashrc to make aliases available immediately
+echo "Reloading ~/.bashrc to activate aliases in this session..."
+source ~/.bashrc 2>/dev/null || true
+echo "Aliases added and activated!"
 
