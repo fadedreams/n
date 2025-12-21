@@ -185,5 +185,4 @@ else
     exit 1
 fi
 
-echo "Starting Neovim to let plugin manager install everything..."
-nvim
+
