@@ -4,7 +4,8 @@ source i.sh
 --zip
 sudo pacman -Syu 7zip
 sudo apt install 7zip
-7z a -p -mhe=on n.7z ~/.cng/n
+
+7z a -pPass -mhe=on n.7z ~/.cng/n
 
 --manual
 cd ~
