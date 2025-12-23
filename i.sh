@@ -1,7 +1,5 @@
 #!/bin/bash
-
 set -euo pipefail
-
 # Detect the OS family using /etc/os-release
 if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -11,45 +9,35 @@ else
     echo "Error: Cannot detect distribution (/etc/os-release not found)."
     exit 1
 fi
-
 echo "Detected distribution: $NAME ($ID)"
-
 # Enable EPEL repository for RHEL-based systems (Rocky, Alma, CentOS, RHEL, etc.)
 if [[ "$DISTRO_LIKE" =~ rhel || "$DISTRO_LIKE" =~ fedora || "$DISTRO_ID" == "rocky" || "$DISTRO_ID" == "almalinux" || "$DISTRO_ID" == "centos" ]]; then
     echo "Enabling EPEL repository for extra packages..."
     sudo dnf install -y epel-release
 fi
-
 # Temporary directory for downloads
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
-
 cd "$TMP_DIR"
-
 # Main installation logic
 if [[ "$DISTRO_ID" =~ ^(debian|ubuntu)$ || "$DISTRO_LIKE" =~ debian ]]; then
     echo "Using apt for Debian-based system..."
     sudo apt update
     sudo apt install -y build-essential software-properties-common git ripgrep xclip fd-find fzf p7zip-full colordiff
-
     if ! command -v fd >/dev/null 2>&1; then
         sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
     fi
-
 elif [[ "$DISTRO_ID" == "fedora" || "$DISTRO_LIKE" =~ fedora || "$DISTRO_LIKE" =~ rhel ]]; then
     echo "Using dnf for Fedora/RHEL-based system (including Rocky Linux)..."
     sudo dnf install -y gcc gcc-c++ make git ripgrep xclip fd-find fzf p7zip p7zip-plugins colordiff
-
     if ! command -v fd >/dev/null 2>&1; then
         sudo ln -sf "$(command -v fd-find)" /usr/local/bin/fd
     fi
-
 else
     echo "Unsupported distribution: $ID - attempting partial + manual installs."
     sudo dnf install -y epel-release || true
     sudo dnf install -y git ripgrep xclip fzf p7zip p7zip-plugins colordiff || true
     sudo apt update && sudo apt install -y git ripgrep xclip fzf p7zip-full colordiff || true
-
     # Manual fzf fallback
     FZF_VERSION="0.67.0"
     FZF_ARCH="amd64"
@@ -59,7 +47,6 @@ else
     tar -xzf "$FZF_TAR"
     sudo mv fzf /usr/local/bin/
     sudo chmod +x /usr/local/bin/fzf
-
     # Manual fd fallback
     FD_VERSION="v10.3.0"
     FD_ARCH="x86_64-unknown-linux-gnu"
@@ -70,22 +57,17 @@ else
     sudo mv "${FD_TAR%.tar.gz}/fd" /usr/local/bin/
     sudo chmod +x /usr/local/bin/fd
 fi
-
 # --- Install Neovim v0.11.5 compatible with older glibc (Rocky 8, CentOS 8, etc.) ---
 echo "Installing Neovim v0.11.5 (glibc-compatible build for older systems)..."
 NVIM_VERSION="v0.11.5"
 NVIM_TAR="nvim-linux-x86_64.tar.gz"
 NVIM_URL="https://github.com/neovim/neovim-releases/releases/download/${NVIM_VERSION}/${NVIM_TAR}"
-
 curl -L -o "$NVIM_TAR" "$NVIM_URL"
 tar -xzf "$NVIM_TAR"
-
 sudo rm -rf /usr/local/nvim
 sudo mv nvim-linux-x86_64 /usr/local/nvim
 sudo ln -sf /usr/local/nvim/bin/nvim /usr/local/bin/nvim
-
 echo "Neovim ${NVIM_VERSION} (old glibc compatible) installed successfully."
-
 # Verify installations
 echo "Verifying installed tools..."
 command -v git >/dev/null && echo "git installed" || echo "git missing"
@@ -95,14 +77,81 @@ command -v fd >/dev/null && echo "fd installed" || echo "fd missing"
 command -v fzf >/dev/null && echo "fzf installed" || echo "fzf missing"
 command -v 7z >/dev/null && echo "7-Zip (7z) installed" || echo "7-Zip missing"
 command -v nvim >/dev/null && nvim --version | head -n1 && echo "Neovim installed" || echo "Neovim missing"
+# ========================================
+# Useful Functions
+# ========================================
+echo "Adding useful functions to ~/.bashrc..."
+cat << 'EOF' >> ~/.bashrc
+
+# clip: Copy command output to clipboard using xclip
+# Example: ls | clip or clip "git status"
+clip() {
+    # Check if xclip is installed
+    if ! command -v xclip &>/dev/null; then
+        echo "Error: xclip is not installed. Install with: sudo apt install xclip" >&2
+        return 1
+    fi
+    # Need at least one argument
+    if [ $# -eq 0 ]; then
+        echo "Usage: clip <command>" >&2
+        return 1
+    fi
+    # Run command and pipe to clipboard
+    eval "$@" | xclip -selection clipboard
+    echo "Output of '$*' copied to clipboard."
+}
+
+killport() {
+    if [[ -z "$1" ]]; then
+        echo "Usage: killport <port>"
+        return 1
+    fi
+    local port="$1"
+    # Use ss to find the PID (users column shows pid/processname)
+    local pids=$(ss -ltnp "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | tr '\n' ' ')
+    if [[ -z "$pids" ]]; then
+        echo "No process found listening on port $port"
+        return 0
+    fi
+    echo "Found process(es) on port $port: $pids"
+    echo "Sending gentle kill (SIGTERM) first..."
+    # Try gentle kill
+    kill $pids 2>/dev/null
+    # Wait and check if still alive
+    sleep 2
+    if ss -ltnp "sport = :$port" >/dev/null 2>&1; then
+        echo "Process(es) didn't stop gracefully. Forcing with SIGKILL..."
+        kill -9 $pids 2>/dev/null
+    else
+        echo "Process(es) stopped successfully."
+    fi
+}
+
+checkport() {
+    if [[ -z "$1" ]]; then
+        echo "Usage: checkport <port>"
+        return 1
+    fi
+    local port="$1"
+    if sudo ss -tuln | grep -q ":$port[[:space:]]"; then
+        echo "Port $port is OPEN (something is listening on it)"
+       
+        # Optional: show more details about what's using it
+        echo "Details:"
+        sudo ss -ltunp "sport = :$port"
+        return 0
+    else
+        echo "Port $port is CLOSED (nothing listening)"
+        return 1
+    fi
+}
+EOF
 
 # ========================================
 # Useful Aliases
 # ========================================
 echo "Adding useful aliases to ~/.bashrc..."
-
 cat << 'EOF' >> ~/.bashrc
-
 # ========================================
 # Useful Aliases
 # ========================================
@@ -158,18 +207,14 @@ alias cwd='pwd | tr -d "\n" | xclip -selection clipboard && echo "PWD copied: $(
 # Copy last command to clipboard
 alias clast='fc -ln -1 | tr -d "\n" | xclip -selection clipboard && echo "Last command copied."'
 EOF
-
-
 # ========================================
 # Deploy your Neovim config
 # ========================================
 echo "Deploying your Neovim config from GitHub release..."
 cd ~
 curl -L -o n.7z https://github.com/fadedreams/n/releases/download/v1.0/n.7z || { echo "Download failed! Check URL or network."; exit 1; }
-
 echo "Extracting config... (you will be prompted for the password)"
 7z x n.7z -o.config/
-
 # Only clean up if extraction succeeded
 if [ $? -eq 0 ]; then
     rm n.7z
@@ -178,9 +223,7 @@ else
     echo "Extraction failed (wrong password or corrupted archive). Keeping n.7z for retry."
     exit 1
 fi
-
 # Source .bashrc to make aliases available immediately
 echo "Reloading ~/.bashrc to activate aliases in this session..."
 source ~/.bashrc 2>/dev/null || true
 echo "Aliases added and activated!"
-
